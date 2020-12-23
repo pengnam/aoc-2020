@@ -1,0 +1,4 @@
+(executable
+  (name solution)
+  (libraries containers base core)
+)
