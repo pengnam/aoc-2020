@@ -6,8 +6,8 @@ type position = {
 }
 
 type state = {
-  angle: int;
-  pos: position;
+  pos_waypoint: position;
+  pos_ship: position;
 }
 
 type transition_function = state-> int -> state
@@ -33,58 +33,81 @@ let modulo x y =
 
 let pi = 4. *. atan 1.
 let to_radian degree  = (float_of_int degree) *. pi /. 180.
+
+let square y = y *. y
+
+
 (*===============================*)
+let shift_in_direction original_pos relative_pos magnitude = 
+  let float_magnitude  = float_of_int magnitude in
+  let new_original = 
+    {
+      x= original_pos.x +. (relative_pos.x -. original_pos.x) *. float_magnitude;
+      y= original_pos.y +. (relative_pos.y -. original_pos.y) *. float_magnitude
+    } in 
+  let new_relative = {
+    x= new_original.x +. (relative_pos.x -. original_pos.x);
+    y= new_original.y +. (relative_pos.y -. original_pos.y)
+  } in
+  new_original, new_relative
+
+let rotate_position center_position relative_position extra_degree = 
+  let x_dist = relative_position.x -. center_position.x in
+  let y_dist = relative_position.y -. center_position.y in
+  let final_degree = to_radian extra_degree in 
+  let sin_val = sin(final_degree) in
+  let cos_val = cos(final_degree) in
+      {
+        x = center_position.x +. cos_val *. x_dist -. sin_val *. y_dist;
+        y = center_position.y +. sin_val *. x_dist +. cos_val *. y_dist;
+      }
+        
+
+
 
 let n_transition state value = {
-  angle = state.angle;
-  pos = {
-    x = state.pos.x;
-    y = state.pos.y +. (float_of_int value);
+  pos_ship = state.pos_ship;
+  pos_waypoint = {
+    x = state.pos_waypoint.x;
+    y = state.pos_waypoint.y +. (float_of_int value);
   }
 }
 
 let s_transition state value = {
-  angle = state.angle;
-  pos = {
-    x = state.pos.x;
-    y = state.pos.y -. (float_of_int value);
+  pos_ship = state.pos_ship;
+  pos_waypoint = {
+    x = state.pos_waypoint.x;
+    y = state.pos_waypoint.y -. (float_of_int value);
   }
 }
 let e_transition state value = {
-  angle = state.angle;
-  pos = {
-    x = state.pos.x +. (float_of_int value);
-    y = state.pos.y;
+  pos_ship = state.pos_ship;
+  pos_waypoint = {
+    x = state.pos_waypoint.x +. (float_of_int value);
+    y = state.pos_waypoint.y;
   }
 }
 let w_transition state value = {
-  angle = state.angle;
-  pos = {
-    x = state.pos.x -. (float_of_int value);
-    y = state.pos.y;
+  pos_ship = state.pos_ship;
+  pos_waypoint = {
+    x = state.pos_waypoint.x -. (float_of_int value);
+    y = state.pos_waypoint.y;
   }
 }
 let l_transition state value = {
-  angle = modulo (state.angle - value ) 360;
-  pos = {
-    x = state.pos.x;
-    y = state.pos.y;
-  }
+  pos_ship = state.pos_ship;
+  pos_waypoint = rotate_position state.pos_ship state.pos_waypoint (value)
 }
 let r_transition state value = {
-  angle = modulo (state.angle + value) 360;
-  pos = {
-    x = state.pos.x;
-    y = state.pos.y;
-  }
+  pos_ship = state.pos_ship;
+  pos_waypoint = rotate_position state.pos_ship state.pos_waypoint ((-1) * value)
 }
 
-let f_transition state value = {
-  angle = state.angle;
-  pos = {
-    x = state.pos.x +. sin(to_radian state.angle) *. float_of_int value;
-    y = state.pos.y +. cos(to_radian state.angle) *. float_of_int value;
-  }
+let f_transition state value =
+  let new_pos_ship, new_pos_waypoint = shift_in_direction state.pos_ship state.pos_waypoint value in 
+  {
+    pos_ship = new_pos_ship;
+    pos_waypoint = new_pos_waypoint
 }
 
 
@@ -100,15 +123,16 @@ let transition_map =
 
 let initial_state = {
   (* Faces east *)
-  angle = 90;
-  pos = {
+  pos_ship = {
     x = 0.;
     y = 0.;
+  };
+  pos_waypoint = {
+    x = 10.;
+    y = 1.;
   }
 }
 
-let get_pos_from_state state = 
-  state.pos
 
 let manhattan_distance pos =
   (abs_float pos.x) +. (abs_float pos.y)
@@ -117,7 +141,7 @@ let manhattan_distance pos =
 let next_state  state instruction m = 
     let transition = StringMap.find instruction.event m in
   let n_s = transition state instruction.value in
-  n_s |>  fun s -> Printf.printf "%d %f %f %f\n"s.angle s.pos.x s.pos.y (manhattan_distance s.pos);
+  n_s |>  fun s -> Printf.printf "ship: %f %f waypoint: %f %f distance: %f\n" s.pos_ship.x s.pos_ship.y s.pos_waypoint.x s.pos_waypoint.y (manhattan_distance s.pos_ship);
   n_s
 
 
@@ -128,7 +152,9 @@ let evaluate instructions =
     instructions
   
 
-(*===============================*)
+
+
+(*==============================*)
 
 let create_instruction c v = 
   {
