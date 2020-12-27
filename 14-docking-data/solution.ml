@@ -22,7 +22,8 @@ let empty_mask =
   (* 0 mask *)
   bit_mask,
   (* 1 mask *)
-  0
+  0,
+  []
 
 let one_at_pos integer pos =
   Int.bit_or integer (Int.shift_left 1 pos)
@@ -39,35 +40,15 @@ let get_mask_for_mask_instruction mask =
   let string_length = String.length mask in 
   List.foldi
     ~f:(fun (index)(curr_mask)(char_at_index) ->
-      let mask_0, mask_1 = curr_mask in 
+      let mask_0, mask_1, mask_x = curr_mask in 
       let bit_pos = string_length - index - 1 in 
       match char_at_index with
-      'X' -> curr_mask
-      | '0' -> (zero_at_pos mask_0 bit_pos), mask_1
-      | '1' -> mask_0, (one_at_pos mask_1 bit_pos)
+      'X' ->(mask_0, mask_1, bit_pos ::  mask_x)
+      | '0' -> curr_mask
+      | '1' -> mask_0, (one_at_pos mask_1 bit_pos), mask_x
       | _ -> raise (Failure "Yo not allowed")
     )
     ~init:empty_mask
-
-
-let apply_mask_on_value mask value = 
-  let mask_0, mask_1 = mask in
-  value
-      |> Int.bit_and mask_0
-      |> Int.bit_or mask_1
-
-(* ============================================ *)
-
-let empty_memory = Map.empty (module Int)
-
-let add_memory key value memory = Map.set ~key: key ~data: value memory
-
-
-let get_result memory = 
-  Map.data  memory
-  |> List.fold
-  ~f:(+)
-  ~init:0
 
   let bin_of_int d =
   if d < 0 then invalid_arg "bin_of_int" else
@@ -77,6 +58,59 @@ let get_result memory =
     aux (string_of_int (d land 1) :: acc) (d lsr 1)
   in
   String.concat ~sep:"" (aux [] d)
+
+let apply_mask_on_value mask value = 
+  let mask_0, mask_1, mask_x = mask in
+  let value_before_x = value
+      |> Int.bit_and mask_0
+      |> Int.bit_or mask_1 in 
+  let white_out_value = mask_x 
+      |> List.fold 
+      ~f: (fun (new_value)(x_pos) ->
+        zero_at_pos new_value x_pos)
+      ~init:value_before_x
+  in
+  Printf.printf "white out value:%s\n" (bin_of_int white_out_value);
+  mask_x
+  |> List.fold 
+  ~f:(fun (candidate_list) (x_pos) ->
+    candidate_list
+      |> List.fold 
+      ~f:(
+        fun (new_candidate_list) (candidate) ->
+          (one_at_pos candidate x_pos) :: new_candidate_list
+      )
+      ~init:candidate_list
+  )
+  ~init:[white_out_value;]
+
+(* ============================================ *)
+
+let empty_memory = Map.empty (module Int)
+
+let add_memory keys value memory = 
+  keys
+      |> List.fold
+      ~f: (fun (mem) (key) -> Map.set ~key: key ~data: value mem)
+      ~init: memory
+
+
+
+
+let get_result memory = 
+  Map.data  memory
+  |> List.fold
+  ~f:(+)
+  ~init:0
+
+
+let string_of_list l =
+  let rec aux acc l =
+    match l with
+    [] -> acc
+      | h :: tl -> aux ((string_of_int h)::acc) (tl)
+  in 
+  String.concat ~sep:" " (aux [] l)
 
 let print_contents memory =
   memory
@@ -108,21 +142,22 @@ let evaluate_instructions instructions =
     ~f:(
       fun (memory, mask) (instruction) -> 
         Printf.printf "--------------\n";
-        print_contents memory;
-        Printf.printf "Current mask %s & %s || Current result: %d\n" (bin_of_int (fst mask)) (bin_of_int (snd mask)) (get_result memory);
+        (*print_contents memory;
+        let mask_1, mask_2, mask_x = mask in 
+        Printf.printf "Current mask %s & %s & %s || Current result: %d\n" (bin_of_int (mask_1)) (bin_of_int (mask_2)) (string_of_list mask_x) (get_result memory);*)
         match instruction with
         Mask instr -> (memory, get_mask_for_mask_instruction instr.mask)
         | Memory instr -> 
-            let masked_value = apply_mask_on_value mask instr.number in
-            (add_memory instr.location masked_value memory), mask 
+            let keys = apply_mask_on_value mask instr.location  in
+            Printf.printf "keys: %s\n" (string_of_list keys);
+            (add_memory keys instr.number memory), mask 
       )
     ~init: (empty_memory, empty_mask)
 
     
 
 
-let part1 instructions = 
-    
+let part2 instructions = 
   let memory, _ = evaluate_instructions instructions in
     get_result memory
 
@@ -146,6 +181,6 @@ let instructions =
 
 
 let _ = 
-  instructions |> part1 |> (Printf.printf "part1: %d\n" ) ;;
+  instructions |> part2 |> (Printf.printf "part1: %d\n" ) ;;
 
 
